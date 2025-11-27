@@ -2,9 +2,6 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# NOTE: `.env` is loaded by `main.py` (via `load_dotenv()`); avoid loading it here
-# so imports remain side-effect free when uvicorn imports the module.
-
 # Configure logging for the module
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',

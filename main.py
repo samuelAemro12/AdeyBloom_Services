@@ -22,10 +22,14 @@ async def root():
 
 
 from telegram_bot import create_application
+from api.database import connect_to_mongo, close_mongo
 
 
 @app.on_event("startup")
 async def startup_event():
+    # Connect to MongoDB first (if configured)
+    await connect_to_mongo(app)
+
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         logger.warning("TELEGRAM_BOT_TOKEN not set; Telegram bot will not start.")
@@ -53,6 +57,11 @@ async def shutdown_event():
             await bot_app.shutdown()
         except Exception:
             logger.exception("Failed during bot shutdown; continuing exit.")
+    # Close MongoDB connection (if any)
+    try:
+        await close_mongo(app)
+    except Exception:
+        logger.exception("Error while closing MongoDB connection during shutdown.")
 
 
 def main():
