@@ -23,6 +23,11 @@ async def root():
 
 from telegram_bot import create_application
 from api.database import connect_to_mongo, close_mongo
+from api import services as api_services
+from api.routes_products import router as products_router
+
+# Mount API routes
+app.include_router(products_router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -37,6 +42,13 @@ async def startup_event():
 
     logger.info("Starting Telegram bot in background thread (polling)...")
     application = create_application(token)
+
+    # Attach DB and services to the telegram Application so handlers can access them
+    try:
+        application.bot_data["db"] = app.state.db
+        application.bot_data["services"] = api_services
+    except Exception:
+        logger.exception("Failed to attach DB/services to application.bot_data; continuing.")
 
     # Run blocking polling call in a daemon thread so FastAPI remains responsive
     t = threading.Thread(target=application.run_polling, daemon=True)

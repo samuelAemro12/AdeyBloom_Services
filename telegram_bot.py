@@ -56,9 +56,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(text="Select a category:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data and query.data.startswith("category:"):
-        # For phase 1 we show a placeholder list; real product list will come in Phase 2
+        # For Phase 2: fetch products from DB via services if available
         category = query.data.split(":", 1)[1]
-        await query.edit_message_text(text=f"Products for category: {category}\nFeature coming soon: real product list.")
+        services = context.application.bot_data.get("services")
+        db = context.application.bot_data.get("db")
+        if services is None:
+            await query.edit_message_text(text=f"Products for category: {category}\nDB not available yet.")
+            return
+
+        try:
+            products = await services.get_products(db, limit=5, skip=0, filters={"category": category})
+        except Exception:
+            products = []
+
+        if not products:
+            await query.edit_message_text(text=f"No products found for category: {category}")
+            return
+
+        # Build a keyboard of product buttons
+        keyboard = [[InlineKeyboardButton(p.get("name") or "Unnamed", callback_data=f"product:{p.get('id')}")] for p in products]
+        keyboard.append([InlineKeyboardButton("Back", callback_data="back_to_menu")])
+        await query.edit_message_text(text=f"Products for category: {category}", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == VIEW_CART:
         await query.edit_message_text(text="Feature coming soon: View Cart")
@@ -68,6 +86,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif query.data == AI_ASSISTANT:
         await query.edit_message_text(text="AI Assistant is coming soon — stay tuned!")
+
+    elif query.data and query.data.startswith("product:"):
+        product_id = query.data.split(":", 1)[1]
+        services = context.application.bot_data.get("services")
+        db = context.application.bot_data.get("db")
+        if services is None:
+            await query.edit_message_text(text="Product details unavailable: DB not connected.")
+            return
+        product = await services.get_product_by_id(db, product_id)
+        if not product:
+            await query.edit_message_text(text="Product not found.")
+            return
+
+        # Build product detail text
+        name = product.get("name")
+        price = product.get("price")
+        currency = product.get("currency") or ""
+        desc = product.get("description") or ""
+        stock = product.get("stock")
+        text = f"{name}\nPrice: {price} {currency}\nStock: {stock}\n\n{desc}"
+
+        # Detail buttons (Add to cart/wishlist/back) — cart functionality is Phase 2 storage
+        kb = [
+            [InlineKeyboardButton("Add to Cart", callback_data=f"cart:add:{product_id}"), InlineKeyboardButton("Add to Wishlist", callback_data=f"wish:add:{product_id}")],
+            [InlineKeyboardButton("Back", callback_data="back_to_menu")],
+        ]
+
+        # If there is an image we can send it as a photo with caption; otherwise edit message text
+        images = product.get("images") or []
+        if images:
+            # send photo and replace the current message
+            try:
+                await query.message.reply_photo(photo=images[0], caption=text, reply_markup=InlineKeyboardMarkup(kb))
+                await query.delete_message()
+            except Exception:
+                await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb))
+        else:
+            await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb))
 
     elif query.data == "back_to_menu":
         # Recreate the main menu
