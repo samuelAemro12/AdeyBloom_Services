@@ -99,17 +99,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.edit_message_text(text="Product not found.")
             return
 
-        # Build product detail text
-        name = product.get("name")
+        # Build product detail text (Name, Price, Description, Rating)
+        name = product.get("name") or "Unnamed"
         price = product.get("price")
         currency = product.get("currency") or ""
-        desc = product.get("description") or ""
-        stock = product.get("stock")
-        text = f"{name}\nPrice: {price} {currency}\nStock: {stock}\n\n{desc}"
+        desc = product.get("description") or "No description available."
+        # rating may be present on the product doc (0-5). If absent, show 'No rating'.
+        rating_value = product.get("rating")
+        if rating_value is None:
+            rating_text = "No rating"
+        else:
+            try:
+                r = float(rating_value)
+                filled = int(round(r))
+                stars = '⭐' * max(0, min(5, filled))
+                empty = '☆' * (5 - max(0, min(5, filled)))
+                rating_text = f"{stars}{empty} ({r:.1f})"
+            except Exception:
+                rating_text = str(rating_value)
 
-        # Detail buttons (Add to cart/wishlist/back) — cart functionality is Phase 2 storage
+        # Format message using HTML for bold name
+        text = f"<b>{name}</b>\nPrice: {price} {currency}\n\n{desc}\n\n⭐ Rating: {rating_text}"
+
+        # Detail buttons (Add to cart/wishlist/back)
         kb = [
-            [InlineKeyboardButton("Add to Cart", callback_data=f"cart:add:{product_id}"), InlineKeyboardButton("Add to Wishlist", callback_data=f"wish:add:{product_id}")],
+            [InlineKeyboardButton("Add to Cart", callback_data=f"cart:add:{product_id}"), InlineKeyboardButton("Add to Wishlist", callback_data=f"wish:add:{product_id}" )],
             [InlineKeyboardButton("Back", callback_data="back_to_menu")],
         ]
 
@@ -118,12 +132,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if images:
             # send photo and replace the current message
             try:
-                await query.message.reply_photo(photo=images[0], caption=text, reply_markup=InlineKeyboardMarkup(kb))
+                await query.message.reply_photo(photo=images[0], caption=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode='HTML')
                 await query.delete_message()
             except Exception:
-                await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb))
+                await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode='HTML')
         else:
-            await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb))
+            await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode='HTML')
 
     elif query.data == "back_to_menu":
         # Recreate the main menu
