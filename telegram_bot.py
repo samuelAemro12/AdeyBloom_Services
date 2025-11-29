@@ -1,4 +1,6 @@
 import logging
+import os
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -138,6 +140,47 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode='HTML')
         else:
             await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(kb), parse_mode='HTML')
+
+    elif query.data and query.data.startswith("cart:add:"):
+        # Add product to user's cart via backend telegram endpoint
+        product_id = query.data.split(":", 2)[2]
+        backend = os.getenv("BACKEND_URL") or "http://localhost:5000"
+        telegram_id = str(user.id)
+        payload = {"telegram_id": telegram_id, "product_id": product_id, "quantity": 1}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(f"{backend}/api/telegram/cart/add", json=payload)
+            if resp.status_code >= 200 and resp.status_code < 300:
+                await query.answer(text="Added to cart", show_alert=False)
+                # Optionally update the message to show a confirmation
+                await query.message.reply_text("✅ Product added to your cart.")
+            else:
+                await query.answer(text="Failed to add to cart", show_alert=True)
+                await query.message.reply_text(f"Failed to add to cart: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.exception("Error calling backend cart add: %s", e)
+            await query.answer(text="Error adding to cart", show_alert=True)
+            await query.message.reply_text("An error occurred while adding to cart.")
+
+    elif query.data and query.data.startswith("wish:add:"):
+        # Wishlist fallback: call the cart add endpoint with an as_wishlist flag.
+        product_id = query.data.split(":", 2)[2]
+        backend = os.getenv("BACKEND_URL") or "http://localhost:5000"
+        telegram_id = str(user.id)
+        payload = {"telegram_id": telegram_id, "product_id": product_id, "quantity": 1, "as_wishlist": True}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(f"{backend}/api/telegram/cart/add", json=payload)
+            if resp.status_code >= 200 and resp.status_code < 300:
+                await query.answer(text="Added to wishlist (saved)", show_alert=False)
+                await query.message.reply_text("💖 Product saved (wishlist fallback).")
+            else:
+                await query.answer(text="Failed to save to wishlist", show_alert=True)
+                await query.message.reply_text(f"Failed to save to wishlist: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.exception("Error calling backend wishlist add: %s", e)
+            await query.answer(text="Error saving to wishlist", show_alert=True)
+            await query.message.reply_text("An error occurred while saving to wishlist.")
 
     elif query.data == "back_to_menu":
         # Recreate the main menu
